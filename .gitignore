@@ -1,0 +1,28 @@
+# Environment variables (contains secrets - never commit)
+.env
+*/.env
+**/.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+backend/venv/
+
+# Node / Next.js
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Uploaded files
+uploads/
+backend/uploads/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
