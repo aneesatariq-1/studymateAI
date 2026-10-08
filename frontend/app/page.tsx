@@ -29,6 +29,15 @@ const WELCOME_MESSAGE: Message = {
 
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".xlsx", ".xls", ".pptx"];
 
+type Language = "auto" | "english" | "roman_urdu" | "urdu";
+
+const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
+  { value: "auto", label: "Auto (match my question)" },
+  { value: "english", label: "English" },
+  { value: "roman_urdu", label: "Roman Urdu" },
+  { value: "urdu", label: "اردو (Urdu)" },
+];
+
 const GEMINI_BUSY_MESSAGE =
   "The AI is currently busy handling high demand. Please wait a few seconds and try again.";
 
@@ -229,6 +238,7 @@ export default function StudyMateDashboard() {
   const [inputQuery, setInputQuery] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [language, setLanguage] = useState<Language>("auto");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -252,6 +262,9 @@ export default function StudyMateDashboard() {
         if (parsed?.isIndexed) setIsIndexed(true);
         if (parsed?.fileName) setFileName(parsed.fileName);
         if (parsed?.uploadStatus) setUploadStatus(parsed.uploadStatus);
+        if (LANGUAGE_OPTIONS.some((o) => o.value === parsed?.language)) {
+          setLanguage(parsed.language as Language);
+        }
       }
     } catch {
       // ignore corrupt storage — falls back to the default welcome state
@@ -265,12 +278,12 @@ export default function StudyMateDashboard() {
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ messages, isIndexed, fileName, uploadStatus })
+        JSON.stringify({ messages, isIndexed, fileName, uploadStatus, language })
       );
     } catch {
       // storage full/unavailable — non-fatal, chat still works this session
     }
-  }, [messages, isIndexed, fileName, uploadStatus, hydrated]);
+  }, [messages, isIndexed, fileName, uploadStatus, language, hydrated]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -326,6 +339,10 @@ export default function StudyMateDashboard() {
 
       if (res.ok && data.success) {
         setIsIndexed(true);
+        if (data.detectedLanguage === "urdu") {
+          setLanguage("urdu");
+          setToastMessage("Urdu document detected. Answers will be in Urdu. You can change this from the language menu.");
+        }
         const unitLabel = getUnitLabel(ext);
 
         setUploadStatus(`Indexed successfully! (${data.totalChunks} chunks processed)`);
@@ -399,7 +416,7 @@ export default function StudyMateDashboard() {
       const res = await fetch(`${BACKEND_URL}/api/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, language }),
       });
 
       if (sessionTokenRef.current !== token) return; // New Chat fired mid-request — drop this response
@@ -457,7 +474,7 @@ export default function StudyMateDashboard() {
     setIsGenerating(true);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/mindmap`);
+      const res = await fetch(`${BACKEND_URL}/api/mindmap?language=${language}`);
       const payload = await res.json().catch(() => null);
       if (sessionTokenRef.current !== token) return;
 
@@ -587,9 +604,21 @@ export default function StudyMateDashboard() {
               {isIndexed ? `${getFileTypeName(fileName)} Active & Indexed` : "Waiting for a study document..."}
             </span>
           </div>
-          <div className="text-xs font-mono px-3 py-1 rounded-full bg-darkCard border border-borderColor text-slate-400">
-            Backend: FastAPI · Port 8000
-          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            <span>🌐 Response language</span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as Language)}
+              aria-label="Response language"
+              className="bg-darkCard border border-borderColor rounded-full px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500 cursor-pointer"
+            >
+              {LANGUAGE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-6 z-10">
@@ -640,6 +669,7 @@ export default function StudyMateDashboard() {
                       <p className="text-slate-400 animate-pulse">Building your mind map...</p>
                     ) : (
                       <div
+                        dir="auto"
                         className="prose prose-sm prose-invert max-w-none font-sans
                           prose-p:my-2 prose-p:leading-relaxed
                           prose-headings:font-sans prose-headings:font-semibold prose-headings:text-slate-50
@@ -684,7 +714,7 @@ export default function StudyMateDashboard() {
                     )}
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  <div dir="auto" className="whitespace-pre-wrap">{msg.text}</div>
                 )}
               </div>
             </div>
